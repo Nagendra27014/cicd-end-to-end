@@ -1,67 +1,83 @@
 pipeline {
-    
-    agent any 
-    
+    agent any
+
     environment {
-        IMAGE_TAG = "${BUILD_NUMBER}"
+        // Disable BuildKit to avoid buildx issues
+        DOCKER_BUILDKIT = "0"
+
+        // Docker Hub credentials ID in Jenkins
+        DOCKER_CREDENTIALS_ID = 'dockerhub-credentials'
+
+        // Docker image name
+        IMAGE_NAME = 'abhishekf5/cicd-e2e'
+        IMAGE_TAG = 'latest'
+
+        // Kubernetes manifests repo
+        K8S_REPO = 'https://github.com/Nagendra27014/k8s-manifests.git'
+        K8S_BRANCH = 'main'
     }
-    
+
     stages {
-        
-        stage('Checkout'){
-           steps {
-                git credentialsId: 'f87a34a8-0e09-45e7-b9cf-6dc68feac670', 
-                url: 'https://github.com/iam-veeramalla/cicd-end-to-end',
-                branch: 'main'
-           }
+        stage('Checkout App Repo') {
+            steps {
+                git url: 'https://github.com/Nagendra27014/cicd-end-to-end', branch: 'main'
+            }
         }
 
-        stage('Build Docker'){
-            steps{
-                script{
+        stage('Build Docker Image') {
+            steps {
+                script {
                     sh '''
-                    echo 'Buid Docker Image'
-                    docker build -t abhishekf5/cicd-e2e:${BUILD_NUMBER} .
+                    echo "Building Docker Image..."
+                    docker build -t $IMAGE_NAME:$IMAGE_TAG .
                     '''
                 }
             }
         }
 
-        stage('Push the artifacts'){
-           steps{
-                script{
-                    sh '''
-                    echo 'Push to Repo'
-                    docker push abhishekf5/cicd-e2e:${BUILD_NUMBER}
-                    '''
-                }
-            }
-        }
-        
-        stage('Checkout K8S manifest SCM'){
+        stage('Push Docker Image') {
             steps {
-                git credentialsId: 'f87a34a8-0e09-45e7-b9cf-6dc68feac670', 
-                url: 'https://github.com/iam-veeramalla/cicd-demo-manifests-repo.git',
-                branch: 'main'
-            }
-        }
-        
-        stage('Update K8S manifest & push to Repo'){
-            steps {
-                script{
-                    withCredentials([usernamePassword(credentialsId: 'f87a34a8-0e09-45e7-b9cf-6dc68feac670', passwordVariable: 'GIT_PASSWORD', usernameVariable: 'GIT_USERNAME')]) {
+                script {
+                    withCredentials([usernamePassword(credentialsId: "$DOCKER_CREDENTIALS_ID", passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {
                         sh '''
-                        cat deploy.yaml
-                        sed -i '' "s/32/${BUILD_NUMBER}/g" deploy.yaml
-                        cat deploy.yaml
-                        git add deploy.yaml
-                        git commit -m 'Updated the deploy yaml | Jenkins Pipeline'
-                        git remote -v
-                        git push https://github.com/iam-veeramalla/cicd-demo-manifests-repo.git HEAD:main
-                        '''                        
+                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                        docker push $IMAGE_NAME:$IMAGE_TAG
+                        docker logout
+                        '''
                     }
                 }
             }
+        }
+
+        stage('Checkout K8S Manifests') {
+            steps {
+                git url: "$K8S_REPO", branch: "$K8S_BRANCH"
+            }
+        }
+
+        stage('Update K8S Deployment') {
+            steps {
+                script {
+                    // Replace image tag in deployment.yaml
+                    sh '''
+                    sed -i "s|image:.*|image: $IMAGE_NAME:$IMAGE_TAG|" deployment.yaml
+                    git config user.email "jenkins@example.com"
+                    git config user.name "Jenkins CI"
+                    git add deployment.yaml
+                    git commit -m "Update deployment image to $IMAGE_TAG"
+                    git push origin $K8S_BRANCH
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Pipeline completed successfully!'
+        }
+        failure {
+            echo 'Pipeline failed. Check logs for details.'
         }
     }
 }
