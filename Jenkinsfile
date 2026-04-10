@@ -2,35 +2,38 @@ pipeline {
     agent any
 
     environment {
-        // Disable BuildKit to avoid buildx issues
-        DOCKER_BUILDKIT = "0"
-
-        // Docker Hub credentials ID in Jenkins
-        DOCKER_CREDENTIALS_ID = 'dockerhub-credentials'
-
-        // Docker image name
-        IMAGE_NAME = 'abhishekf5/cicd-e2e'
-        IMAGE_TAG = 'latest'
-
-        // Kubernetes manifests repo
-        K8S_REPO = 'https://github.com/Nagendra27014/cicd-demo-manifests-repo'
-        K8S_BRANCH = 'main'
+        DOCKER_IMAGE = "abhishekf5/cicd-e2e:latest"
+        KUBECONFIG = credentials('kubeconfig')
     }
 
     stages {
-        stage('Checkout App Repo') {
+
+        stage('Checkout Code') {
             steps {
-                git url: 'https://github.com/Nagendra27014/cicd-end-to-end', branch: 'main'
+                git branch: 'main',
+                    url: 'https://github.com/Nagendra27014/cicd-end-to-end'
             }
         }
 
         stage('Build Docker Image') {
             steps {
                 script {
-                    sh '''
                     echo "Building Docker Image..."
-                    docker build -t $IMAGE_NAME:$IMAGE_TAG .
-                    '''
+                    sh "docker build -t ${DOCKER_IMAGE} ."
+                }
+            }
+        }
+
+        stage('Login to Docker Hub') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(
+                        credentialsId: 'dockerhub-credentials',
+                        usernameVariable: 'USERNAME',
+                        passwordVariable: 'PASSWORD'
+                    )]) {
+                        sh "echo $PASSWORD | docker login -u $USERNAME --password-stdin"
+                    }
                 }
             }
         }
@@ -38,35 +41,18 @@ pipeline {
         stage('Push Docker Image') {
             steps {
                 script {
-                    withCredentials([usernamePassword(credentialsId: "$DOCKER_CREDENTIALS_ID", passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {
-                        sh '''
-                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-                        docker push $IMAGE_NAME:$IMAGE_TAG
-                        docker logout
-                        '''
-                    }
+                    sh "docker push ${DOCKER_IMAGE}"
                 }
             }
         }
 
-        stage('Checkout K8S Manifests') {
-            steps {
-                git url: "$K8S_REPO", branch: "$K8S_BRANCH"
-            }
-        }
-
-        stage('Update K8S Deployment') {
+        stage('Deploy to Kubernetes') {
             steps {
                 script {
-                    // Replace image tag in deployment.yaml
-                    sh '''
-                    sed -i "s|image:.*|image: $IMAGE_NAME:$IMAGE_TAG|" deployment.yaml
-                    git config user.email "jenkins@example.com"
-                    git config user.name "Jenkins CI"
-                    git add deployment.yaml
-                    git commit -m "Update deployment image to $IMAGE_TAG"
-                    git push origin $K8S_BRANCH
-                    '''
+                    sh """
+                    kubectl apply -f k8s/
+                    kubectl set image deployment/myapp myapp=${DOCKER_IMAGE}
+                    """
                 }
             }
         }
@@ -74,10 +60,11 @@ pipeline {
 
     post {
         success {
-            echo 'Pipeline completed successfully!'
+            echo "Pipeline SUCCESS 🚀"
         }
+
         failure {
-            echo 'Pipeline failed. Check logs for details.'
+            echo "Pipeline FAILED ❌ Check logs"
         }
     }
 }
