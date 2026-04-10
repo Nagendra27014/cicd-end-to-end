@@ -13,7 +13,7 @@ pipeline {
         IMAGE_TAG = 'latest'
 
         // Kubernetes manifests repo
-        K8S_REPO = 'https://github.com/Nagendra27014/k8s-manifests.git'
+        K8S_REPO = 'https://github.com/Nagendra27014/cicd-demo-manifests-repo'
         K8S_BRANCH = 'main'
     }
 
