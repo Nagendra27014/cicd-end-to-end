@@ -47,6 +47,8 @@ pipeline {
                 script{
                     withCredentials([usernamePassword(credentialsId: '1b9ce9a7-abba-4897-b473-0451775ab972', passwordVariable: 'GIT_PASSWORD', usernameVariable: 'GIT_USERNAME')]) {
                         sh '''
+                        git config --global user.email "nagendrababumadaka@gmail.com"
+                        git config --global user.name "Nagendra27014"
                         cat deploy.yaml
                         sed -i "s#nagendrababumadaka/cicd-e2e:.*#nagendrababumadaka/cicd-e2e:${BUILD_NUMBER}#g" deploy.yaml
                         cat deploy.yaml
