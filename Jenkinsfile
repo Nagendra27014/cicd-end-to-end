@@ -48,7 +48,7 @@ pipeline {
                     withCredentials([usernamePassword(credentialsId: '1b9ce9a7-abba-4897-b473-0451775ab972', passwordVariable: 'GIT_PASSWORD', usernameVariable: 'GIT_USERNAME')]) {
                         sh '''
                         cat deploy.yaml
-                        sed -i '' "s/32/${BUILD_NUMBER}/g" deploy.yaml
+                        sed -i "s#nagendrababumadaka/cicd-e2e:.*#nagendrababumadaka/cicd-e2e:${BUILD_NUMBER}#g" deploy.yaml
                         cat deploy.yaml
                         git add deploy.yaml
                         git commit -m 'Updated the deploy yaml | Jenkins Pipeline'
